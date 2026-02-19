@@ -1,0 +1,93 @@
+syntax = "proto3";
+package redpanda_mm;
+option go_package = "github.com/yourorg/redpanda-mm/gen/proto";
+
+enum OpType {
+  OP_UNKNOWN = 0;
+  OP_PUT = 1;
+  OP_PATCH = 2;
+  OP_INC = 3;
+  OP_PUT_IF_ABSENT = 4;
+  OP_CAS = 5;
+  OP_RESERVE = 6;
+  OP_CANCEL = 7;
+  OP_CLAIM = 8;
+  OP_COMPLETE = 9;
+}
+
+enum OutcomeType {
+  OUTCOME_UNKNOWN = 0;
+  OUTCOME_COMMIT_PATCH = 1;
+  OUTCOME_NOOP = 2;
+  OUTCOME_FAIL = 3;
+  OUTCOME_TRANSFORM = 4;
+}
+
+enum ConflictReason {
+  REASON_UNKNOWN = 0;
+  REASON_OVERLAP_WRITESET = 1;
+  REASON_SAME_FIELD = 2;
+  REASON_PRECOND_DEP = 3;
+}
+
+message HLC {
+  int64 physical_ms = 1;
+  uint32 logical = 2;
+}
+
+message AcceptedRecord {
+  string op_id = 1;
+  string region = 2;
+  string key = 3;
+  OpType op_type = 4;
+  bytes args_json = 5;
+  repeated string write_set = 6;
+  HLC hlc = 7;
+  int64 ingest_ts_ms = 8;
+  string client_id = 9;
+  string session_id = 10;
+}
+
+message OpRef {
+  string region = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int64 offset = 4;
+  string op_id = 5;
+  HLC hlc = 6;
+}
+
+message ConflictCertificate {
+  string conflict_id = 1;
+  string key = 2;
+  repeated OpRef contenders = 3;
+  ConflictReason reason = 4;
+  bytes stable_version_hash = 5;
+}
+
+enum FinalizeType {
+  FINALIZE_UNKNOWN = 0;
+  FINALIZE_MERGE = 1;
+  FINALIZE_REBASE = 2;
+}
+
+message OpOutcome {
+  string op_id = 1;
+  OutcomeType outcome = 2;
+  string reason = 3;
+  bytes patch_json = 4;
+  bytes transform_json = 5;
+}
+
+message FinalizeRecord {
+  string conflict_id = 1;
+  string key = 2;
+  repeated string decided_order = 3;
+  repeated OpOutcome outcomes = 4;
+  bytes final_state_hash = 5;
+  bytes verifier_digest = 6;
+  bytes base_state_hash = 7;
+  int64 created_ts_ms = 8;
+  FinalizeType finalize_type = 9;
+  string producer_region = 10;
+}
