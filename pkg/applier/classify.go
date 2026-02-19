@@ -18,7 +18,29 @@ const (
 	ClassificationConflicting
 )
 
+const (
+	ClassifyModeStructural = "structural"
+	ClassifyModeNaive      = "naive"
+)
+
+func NormalizeClassifyMode(mode string) string {
+	switch mode {
+	case ClassifyModeNaive:
+		return ClassifyModeNaive
+	default:
+		return ClassifyModeStructural
+	}
+}
+
 func Classify(op1, op2 *pb.AcceptedRecord, stableState json.RawMessage) (Classification, pb.ConflictReason) {
+	return ClassifyWithMode(ClassifyModeStructural, op1, op2, stableState)
+}
+
+func ClassifyWithMode(mode string, op1, op2 *pb.AcceptedRecord, stableState json.RawMessage) (Classification, pb.ConflictReason) {
+	if NormalizeClassifyMode(mode) == ClassifyModeNaive {
+		return ClassificationConflicting, pb.ConflictReason_REASON_SAME_FIELD
+	}
+
 	if containsStar(op1.WriteSet) || containsStar(op2.WriteSet) {
 		return ClassificationConflicting, pb.ConflictReason_REASON_OVERLAP_WRITESET
 	}

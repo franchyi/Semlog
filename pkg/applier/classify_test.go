@@ -40,3 +40,12 @@ func TestClassifyRules(t *testing.T) {
 		t.Fatal("put_if_absent on existing key should be mergeable")
 	}
 }
+
+func TestClassifyNaiveModeAlwaysConflicting(t *testing.T) {
+	disA := &pb.AcceptedRecord{WriteSet: []string{"/email"}}
+	disB := &pb.AcceptedRecord{WriteSet: []string{"/phone"}}
+	c, _ := ClassifyWithMode(ClassifyModeNaive, disA, disB, nil)
+	if c != ClassificationConflicting {
+		t.Fatal("expected naive mode to always conflict")
+	}
+}

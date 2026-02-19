@@ -31,6 +31,7 @@ func (kl *KeyLocks) Unlock(key string) {
 
 type Applier struct {
 	region           string
+	classifyMode     string
 	brokers          []string
 	producer         *kafka.Producer
 	store            *Store
@@ -42,13 +43,14 @@ type Applier struct {
 	appliedConflicts map[string]bool
 }
 
-func New(region string, brokers []string, producer *kafka.Producer) (*Applier, error) {
+func New(region string, brokers []string, producer *kafka.Producer, classifyMode string) (*Applier, error) {
 	region = strings.ToUpper(strings.TrimSpace(region))
 	if region != "A" && region != "B" {
 		return nil, fmt.Errorf("region must be A or B")
 	}
 	return &Applier{
 		region:           region,
+		classifyMode:     NormalizeClassifyMode(classifyMode),
 		brokers:          brokers,
 		producer:         producer,
 		store:            NewStore(),
@@ -121,7 +123,7 @@ func (a *Applier) onAccepted(ctx context.Context, topic string, msg kgo.Message)
 	stableState, _ := a.store.Get(rec.Key)
 	other := a.pending.GetOtherRegion(rec.Key, rec.Region)
 	for _, contender := range other {
-		classification, reason := Classify(&rec, contender.Op, stableState)
+		classification, reason := ClassifyWithMode(a.classifyMode, &rec, contender.Op, stableState)
 		switch classification {
 		case ClassificationMergeable:
 			ops := []*pb.AcceptedRecord{&rec, contender.Op}

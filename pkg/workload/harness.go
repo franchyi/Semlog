@@ -14,14 +14,16 @@ import (
 type BurstProfile struct{}
 
 type WorkloadConfig struct {
-	KeyspaceSize      int
-	ZipfTheta         float64
-	SharedHotFraction float64
-	OpMix             map[string]float64
-	DisjointFieldProb float64
-	OpsPerSecond      int
-	DurationSec       int
-	BurstProfile      *BurstProfile
+	KeyspaceSize         int
+	ZipfTheta            float64
+	SharedHotFraction    float64
+	OpMix                map[string]float64
+	DisjointFieldProb    float64
+	OpsPerSecond         int
+	DurationSec          int
+	Baseline             string
+	CrossRegionLatencyMS int
+	BurstProfile         *BurstProfile
 }
 
 type WriteRequest struct {
@@ -50,6 +52,7 @@ type Harness struct {
 }
 
 type RunResult struct {
+	Baseline     string         `json:"baseline"`
 	Summary      MetricsSummary `json:"summary"`
 	VerifyPassed bool           `json:"verify_passed"`
 	VerifyError  string         `json:"verify_error,omitempty"`
@@ -62,6 +65,7 @@ func (h *Harness) Run(ctx context.Context) (RunResult, error) {
 	if h.Metrics == nil {
 		h.Metrics = NewMetrics()
 	}
+	h.applyBaselineConfig()
 
 	start := time.Now()
 	deadline := start.Add(time.Duration(h.Config.DurationSec) * time.Second)
@@ -89,7 +93,7 @@ func (h *Harness) Run(ctx context.Context) (RunResult, error) {
 	summary := h.Metrics.Summary(dur)
 
 	verifyErr := Verify(h.ApplierAURL, h.ApplierBURL)
-	result := RunResult{Summary: summary, VerifyPassed: verifyErr == nil}
+	result := RunResult{Baseline: h.Config.Baseline, Summary: summary, VerifyPassed: verifyErr == nil}
 	if verifyErr != nil {
 		result.VerifyError = verifyErr.Error()
 	}
@@ -109,9 +113,36 @@ func (h *Harness) runRegion(ctx context.Context, region, ingestURL string, kp *K
 		<-ticker.C
 		key := kp.Pick(region)
 		req := h.Model.NextOp(region, key, rng)
+		if h.Config.Baseline == "b4" && region == "B" && h.Config.CrossRegionLatencyMS > 0 {
+			time.Sleep(time.Duration(h.Config.CrossRegionLatencyMS) * time.Millisecond)
+		}
 		if err := h.sendWrite(ctx, ingestURL, req); err == nil {
 			h.Metrics.RecordFinalized()
 		}
+	}
+}
+
+func (h *Harness) applyBaselineConfig() {
+	switch h.normalizeBaseline() {
+	case "b4":
+		h.IngestBURL = h.IngestAURL
+		if h.Config.CrossRegionLatencyMS <= 0 {
+			h.Config.CrossRegionLatencyMS = 80
+		}
+	default:
+		if h.Config.CrossRegionLatencyMS < 0 {
+			h.Config.CrossRegionLatencyMS = 0
+		}
+	}
+}
+
+func (h *Harness) normalizeBaseline() string {
+	switch h.Config.Baseline {
+	case "b1", "b2", "b3", "b4", "full":
+		return h.Config.Baseline
+	default:
+		h.Config.Baseline = "full"
+		return "full"
 	}
 }
 

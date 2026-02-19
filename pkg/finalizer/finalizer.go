@@ -11,8 +11,9 @@ import (
 )
 
 type Finalizer struct {
-	brokers  []string
-	producer *kafka.Producer
+	brokers    []string
+	producer   *kafka.Producer
+	rebaseMode string
 
 	stableMu sync.RWMutex
 	stable   map[string]json.RawMessage
@@ -21,12 +22,13 @@ type Finalizer struct {
 	seen   map[string]bool
 }
 
-func New(brokers []string, producer *kafka.Producer) *Finalizer {
+func New(brokers []string, producer *kafka.Producer, rebaseMode string) *Finalizer {
 	return &Finalizer{
-		brokers:  brokers,
-		producer: producer,
-		stable:   map[string]json.RawMessage{},
-		seen:     map[string]bool{},
+		brokers:    brokers,
+		producer:   producer,
+		rebaseMode: NormalizeRebaseMode(rebaseMode),
+		stable:     map[string]json.RawMessage{},
+		seen:       map[string]bool{},
 	}
 }
 
@@ -117,7 +119,7 @@ func (f *Finalizer) consumeCerts(ctx context.Context) {
 		}
 
 		base := f.getStable(cert.Key)
-		finalRec, err := Rebase(&cert, contenders, base)
+		finalRec, err := RebaseWithMode(f.rebaseMode, &cert, contenders, base)
 		if err != nil {
 			log.Printf("rebase failed conflict=%s: %v", cert.ConflictId, err)
 			_ = c.Commit(ctx, msg)

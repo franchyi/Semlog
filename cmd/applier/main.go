@@ -16,10 +16,11 @@ import (
 
 func main() {
 	var (
-		broker   = flag.String("broker", "127.0.0.1:9092", "Kafka broker")
-		region   = flag.String("region", "", "region: A or B")
-		port     = flag.String("port", "8090", "HTTP port")
-		logLevel = flag.String("log-level", "info", "log level")
+		broker       = flag.String("broker", "127.0.0.1:9092", "Kafka broker")
+		region       = flag.String("region", "", "region: A or B")
+		port         = flag.String("port", "8090", "HTTP port")
+		classifyMode = flag.String("classify-mode", "structural", "classification mode: structural|naive")
+		logLevel     = flag.String("log-level", "info", "log level")
 	)
 	flag.Parse()
 	_ = logLevel
@@ -35,7 +36,7 @@ func main() {
 	producer := kafka.NewProducer(brokers, []string{"arb.cert", "arb.final"})
 	defer producer.Close()
 
-	a, err := applier.New(*region, brokers, producer)
+	a, err := applier.New(*region, brokers, producer, *classifyMode)
 	if err != nil {
 		log.Fatal(err)
 	}

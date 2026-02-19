@@ -1,4 +1,4 @@
-# CLAUDE.md — Multi-Master Shared Log on Redpanda
+# AGENTS.md — Multi-Master Shared Log on Redpanda
 
 ## Project: Conflict-Selective Finalization with Semantic Merge and Deterministic Rebase
 
@@ -21,7 +21,9 @@ Build a research prototype where **both regions accept writes concurrently** (mu
 
 ```
 redpanda-mm/
-├── CLAUDE.md                  # This file
+├── CLAUDE.md                  # for claude code
+├── AGENTS.md                  # for codex
+├── baseline.md                # for baseline description
 ├── scripts/
 │   ├── setup-redpanda.sh      # Install + start Redpanda (single broker)
 │   ├── create-topics.sh       # Creates all Kafka topics

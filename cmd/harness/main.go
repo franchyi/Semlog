@@ -13,28 +13,32 @@ import (
 
 func main() {
 	var (
-		workloadID        = flag.String("workload", "B", "Workload: A|B|C|D|E")
-		duration          = flag.Duration("duration", 30*time.Second, "Test duration")
-		opsPerSec         = flag.Int("ops-per-sec", 100, "Per region ops/sec")
-		keyspaceSize      = flag.Int("keyspace-size", 1000, "Number of keys")
-		zipfTheta         = flag.Float64("zipf-theta", 0.8, "Zipf skew")
-		sharedHotFraction = flag.Float64("shared-hot-fraction", 0.05, "Shared hot keys fraction")
-		disjointFieldProb = flag.Float64("disjoint-field-prob", 0.8, "PATCH disjoint probability")
-		ingestAURL        = flag.String("ingest-a-url", "http://localhost:8081", "Ingest A URL")
-		ingestBURL        = flag.String("ingest-b-url", "http://localhost:8082", "Ingest B URL")
-		applierAURL       = flag.String("applier-a-url", "http://localhost:8091", "Applier A URL")
-		applierBURL       = flag.String("applier-b-url", "http://localhost:8092", "Applier B URL")
+		workloadID           = flag.String("workload", "B", "Workload: A|B|C|D|E")
+		baseline             = flag.String("baseline", "full", "Baseline: full|b1|b2|b3|b4")
+		duration             = flag.Duration("duration", 30*time.Second, "Test duration")
+		opsPerSec            = flag.Int("ops-per-sec", 100, "Per region ops/sec")
+		keyspaceSize         = flag.Int("keyspace-size", 1000, "Number of keys")
+		zipfTheta            = flag.Float64("zipf-theta", 0.8, "Zipf skew")
+		sharedHotFraction    = flag.Float64("shared-hot-fraction", 0.05, "Shared hot keys fraction")
+		disjointFieldProb    = flag.Float64("disjoint-field-prob", 0.8, "PATCH disjoint probability")
+		crossRegionLatencyMS = flag.Int("cross-region-latency-ms", 80, "B4 simulated cross-region latency in milliseconds")
+		ingestAURL           = flag.String("ingest-a-url", "http://localhost:8081", "Ingest A URL")
+		ingestBURL           = flag.String("ingest-b-url", "http://localhost:8082", "Ingest B URL")
+		applierAURL          = flag.String("applier-a-url", "http://localhost:8091", "Applier A URL")
+		applierBURL          = flag.String("applier-b-url", "http://localhost:8092", "Applier B URL")
 	)
 	flag.Parse()
 
 	model := selectWorkload(*workloadID, *disjointFieldProb)
 	cfg := workload.WorkloadConfig{
-		KeyspaceSize:      *keyspaceSize,
-		ZipfTheta:         *zipfTheta,
-		SharedHotFraction: *sharedHotFraction,
-		DisjointFieldProb: *disjointFieldProb,
-		OpsPerSecond:      *opsPerSec,
-		DurationSec:       int(duration.Seconds()),
+		KeyspaceSize:         *keyspaceSize,
+		ZipfTheta:            *zipfTheta,
+		SharedHotFraction:    *sharedHotFraction,
+		DisjointFieldProb:    *disjointFieldProb,
+		OpsPerSecond:         *opsPerSec,
+		DurationSec:          int(duration.Seconds()),
+		Baseline:             *baseline,
+		CrossRegionLatencyMS: *crossRegionLatencyMS,
 	}
 
 	h := &workload.Harness{
