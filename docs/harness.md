@@ -42,20 +42,20 @@ Notes:
 - `slx-l` maps to `classify-mode=structural` + `rebase-mode=rebase+llm`.
 - If `OPENAI_API_KEY` is not set, finalizer logs fallback and behaves as deterministic `rebase`.
 
-## Full Comparison (All Workloads x All Baselines)
+## Full Comparison (A/B/D x All Baselines)
 
-This runs `A/B/C/D` across `slx`, `slx-l`, `b1`, `b2`, `b3`, `b4` and writes logs to a new timestamped directory under `results/`.
+This runs `A/B/D` across `slx`, `slx-l`, `b1`, `b2`, `b3`, `b4` and writes logs to a new timestamped directory under `results/`.
 
 Quick (smoke) matrix:
 
 ```bash
-WORKLOADS="A B C D" BASELINES="slx slx-l b1 b2 b3 b4" DURATION="5s" OPS_PER_SEC="100" ./scripts/run-baselines.sh
+WORKLOADS="A B D" BASELINES="slx slx-l b1 b2 b3 b4" DURATION="5s" OPS_PER_SEC="100" ./scripts/run-baselines.sh
 ```
 
 More stable (recommended) matrix:
 
 ```bash
-WORKLOADS="A B C D" BASELINES="slx slx-l b1 b2 b3 b4" DURATION="15s" OPS_PER_SEC="100" ./scripts/run-baselines.sh
+WORKLOADS="A B D" BASELINES="slx slx-l b1 b2 b3 b4" DURATION="15s" OPS_PER_SEC="100" ./scripts/run-baselines.sh
 ```
 
 ## LLM Mode (SLX-L)

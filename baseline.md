@@ -167,10 +167,6 @@ func (f *Finalizer) rebaseLWW(stableState json.RawMessage, ops []*AcceptedRecord
 
 ### Expected result
 
-Under Workload C (Task Queue, concurrent CLAIMs):
-- SLX: one CLAIM wins, the other FAILs (both attempted, one precondition fails) — correct and explicit
-- B2: one CLAIM wins (latest HLC), the other silently NOOPed — correct but information-losing
-
 Under Workload D (Inventory, concurrent RESERVEs):
 - SLX: first RESERVE succeeds, second may also succeed if stock permits (rebase re-checks)
 - B2: only latest RESERVE wins, earlier one silently NOOPed even if both could have succeeded

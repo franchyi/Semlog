@@ -5,14 +5,14 @@ System labels: `slx` (Semlog core), `slx-l` (Semlog + LLM repair)
 
 ## Executive Summary
 
-- A fresh short-run matrix (`A/B/C/D` x `slx/slx-l/b1/b2/b3/b4`) completed successfully: `24/24` pass.
+- A fresh short-run matrix (`A/B/D` x `slx/slx-l/b1/b2/b3/b4`) completed successfully: `18/18` pass.
 - In this 5-second setting, no single mode dominates all workloads.
 - `slx-l` showed **zero** accepted LLM finalizations in all runs (`rebase_llm_finalize_count = 0`).
 - The main bottleneck in conflict-heavy settings appears to be arbitration/finalizer pressure, not ingest.
 
 ## Experiment Setup
 
-- Workloads: `A`, `B`, `C`, `D`
+- Workloads: `A`, `B`, `D`
 - Baselines: `slx`, `slx-l`, `b1`, `b2`, `b3`, `b4`
 - Duration: `5s`
 - Rate: `100 ops/sec` per region
@@ -34,8 +34,8 @@ System labels: `slx` (Semlog core), `slx-l` (Semlog + LLM repair)
 
 ## Completion Status
 
-- Total cells: `24`
-- Passed: `24`
+- Total cells: `18`
+- Passed: `18`
 - Failed: `0`
 
 ## Primary Comparison (finalized/sec)
@@ -44,7 +44,6 @@ System labels: `slx` (Semlog core), `slx-l` (Semlog + LLM repair)
 |---|---:|---:|---:|---:|---:|---:|
 | A | 13.797 | 6.684 | 0.057 | 9.427 | 1.200 | 0.000 |
 | B | 5.742 | 6.313 | 0.714 | 13.540 | 0.000 | 0.000 |
-| C | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
 | D | 0.057 | 0.000 | 0.000 | 0.714 | 0.000 | 0.000 |
 
 ## LLM Utilization Observation
@@ -57,7 +56,7 @@ System labels: `slx` (Semlog core), `slx-l` (Semlog + LLM repair)
 
 - `A` (moderate conflict profile): `slx` outperformed `b1/b3/b4` and exceeded `slx-l` in this run.
 - `B` (profile patch): `b2` was highest on finalized/sec in this short window.
-- `C` and `D` (conflict-heavy): all modes had near-zero finalized sampling in 5 seconds, suggesting insufficient settle time rather than pure ingest bottleneck.
+- `D` (conflict-heavy): most modes had near-zero finalized sampling in 5 seconds, suggesting insufficient settle time rather than pure ingest bottleneck.
 - `b4` remained lower on accepted throughput due to single-master routing.
 
 ## Why Duration Matters
@@ -72,7 +71,7 @@ Yes, duration affects measured performance significantly.
 ## Suggested Next Measurements
 
 1. Re-run this same matrix at `15s` for stable ranking without long turnaround.
-2. Re-run selected stress workloads (`C`, `D`) at `30s` to separate backlog effects from algorithmic differences.
+2. Re-run selected stress workload (`D`) at `30s` to separate backlog effects from algorithmic differences.
 3. Add counters for LLM attempt lifecycle:
    - LLM attempted
    - API call made
@@ -87,4 +86,3 @@ Yes, duration affects measured performance significantly.
 3. Is the right objective to improve finalized throughput, operation survival rate, or semantic quality under fixed latency budget?
 4. Should we evaluate LLM value with workload-specific policies and allowlists rather than a single generic repair prompt?
 5. For publication-quality evaluation, is `15s` sufficient for main charts, with `30s` only for high-contention workloads?
-

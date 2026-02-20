@@ -24,7 +24,7 @@ Usage: $0 [options]
 
 Options:
   --broker <host:port>           Kafka broker (default: ${BROKER})
-  --workload <A|B|C|D|E>         Workload ID (default: ${WORKLOAD})
+  --workload <A|B|D|E>           Workload ID (default: ${WORKLOAD})
   --baseline <slx|slx-l|b1|b2|b3|b4>  Baseline mode (default: ${BASELINE})
   --duration <Go duration>        Harness duration (default: ${DURATION})
   --ops-per-sec <int>            Per-region OPS (default: ${OPS_PER_SEC})
@@ -90,6 +90,15 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+case "${WORKLOAD}" in
+  A|B|D|E)
+    ;;
+  *)
+    echo "Invalid workload: ${WORKLOAD}. Must be one of: A|B|D|E" >&2
+    exit 1
+    ;;
+esac
 
 case "${BASELINE}" in
   slx)

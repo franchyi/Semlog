@@ -13,7 +13,7 @@ import (
 
 func main() {
 	var (
-		workloadID           = flag.String("workload", "B", "Workload: A|B|C|D|E")
+		workloadID           = flag.String("workload", "B", "Workload: A|B|D|E")
 		baseline             = flag.String("baseline", "slx", "Baseline: slx|slx-l|b1|b2|b3|b4")
 		duration             = flag.Duration("duration", 30*time.Second, "Test duration")
 		opsPerSec            = flag.Int("ops-per-sec", 100, "Per region ops/sec")
@@ -29,7 +29,10 @@ func main() {
 	)
 	flag.Parse()
 
-	model := selectWorkload(*workloadID, *disjointFieldProb)
+	model, err := selectWorkload(*workloadID, *disjointFieldProb)
+	if err != nil {
+		log.Fatal(err)
+	}
 	cfg := workload.WorkloadConfig{
 		KeyspaceSize:         *keyspaceSize,
 		ZipfTheta:            *zipfTheta,
@@ -58,19 +61,17 @@ func main() {
 	fmt.Println(string(b))
 }
 
-func selectWorkload(id string, disjointFieldProb float64) workload.WorkloadModel {
+func selectWorkload(id string, disjointFieldProb float64) (workload.WorkloadModel, error) {
 	switch id {
 	case "A":
-		return &workload.WorkloadA{}
-	case "C":
-		return &workload.WorkloadC{}
+		return &workload.WorkloadA{}, nil
 	case "D":
-		return &workload.WorkloadD{}
+		return &workload.WorkloadD{}, nil
 	case "E":
-		return &workload.WorkloadE{}
+		return &workload.WorkloadE{}, nil
 	case "B":
-		fallthrough
+		return workload.NewWorkloadB(disjointFieldProb), nil
 	default:
-		return workload.NewWorkloadB(disjointFieldProb)
+		return nil, fmt.Errorf("unknown workload %q (expected A|B|D|E)", id)
 	}
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKLOADS="${WORKLOADS:-A B C D}"
+WORKLOADS="${WORKLOADS:-A B D}"
 BASELINES="${BASELINES:-slx slx-l b1 b2 b3 b4}"
 DURATION="${DURATION:-60s}"
 OPS_PER_SEC="${OPS_PER_SEC:-500}"
