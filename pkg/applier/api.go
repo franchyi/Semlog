@@ -16,6 +16,7 @@ func (a *Applier) Handler() http.Handler {
 	mux.HandleFunc("/stable", a.handleStable)
 	mux.HandleFunc("/status", a.handleStatus)
 	mux.HandleFunc("/hash", a.handleHash)
+	mux.HandleFunc("/metrics", a.handleMetrics)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -58,4 +59,9 @@ func (a *Applier) handleStatus(w http.ResponseWriter, r *http.Request) {
 func (a *Applier) handleHash(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"hash": a.store.Hash()})
+}
+
+func (a *Applier) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(a.MetricsSnapshot())
 }

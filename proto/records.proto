@@ -69,6 +69,7 @@ enum FinalizeType {
   FINALIZE_UNKNOWN = 0;
   FINALIZE_MERGE = 1;
   FINALIZE_REBASE = 2;
+  FINALIZE_REBASE_LLM = 3;
 }
 
 message OpOutcome {

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	kgo "github.com/segmentio/kafka-go"
 	pb "github.com/yourorg/redpanda-mm/gen/proto"
@@ -41,6 +42,17 @@ type Applier struct {
 	status           map[string]OpStatus
 	appliedMu        sync.Mutex
 	appliedConflicts map[string]bool
+
+	certEmitted            atomic.Int64
+	mergeFinalizeEmitted   atomic.Int64
+	finalRecordsConsumed   atomic.Int64
+	finalMergeConsumed     atomic.Int64
+	finalRebaseConsumed    atomic.Int64
+	finalRebaseLLMConsumed atomic.Int64
+	outcomeCommitPatch     atomic.Int64
+	outcomeNoop            atomic.Int64
+	outcomeFail            atomic.Int64
+	outcomeTransform       atomic.Int64
 }
 
 func New(region string, brokers []string, producer *kafka.Producer, classifyMode string) (*Applier, error) {
@@ -167,7 +179,9 @@ func (a *Applier) emitConflict(ctx context.Context, key string, reason pb.Confli
 	}
 	if _, _, err := a.producer.Write(ctx, "arb.cert", key, b); err != nil {
 		log.Printf("failed to write arb.cert: %v", err)
+		return
 	}
+	a.certEmitted.Add(1)
 }
 
 func (a *Applier) emitFinalize(ctx context.Context, rec *pb.FinalizeRecord) error {
@@ -176,6 +190,9 @@ func (a *Applier) emitFinalize(ctx context.Context, rec *pb.FinalizeRecord) erro
 		return err
 	}
 	_, _, err = a.producer.Write(ctx, "arb.final", rec.Key, b)
+	if err == nil && rec != nil && rec.FinalizeType == pb.FinalizeType_FINALIZE_MERGE {
+		a.mergeFinalizeEmitted.Add(1)
+	}
 	return err
 }
 
@@ -200,6 +217,15 @@ func (a *Applier) consumeFinal(ctx context.Context, topic, group string) {
 			log.Printf("failed to decode finalize: %v", err)
 			_ = c.Commit(ctx, msg)
 			continue
+		}
+		a.finalRecordsConsumed.Add(1)
+		switch rec.FinalizeType {
+		case pb.FinalizeType_FINALIZE_MERGE:
+			a.finalMergeConsumed.Add(1)
+		case pb.FinalizeType_FINALIZE_REBASE:
+			a.finalRebaseConsumed.Add(1)
+		case pb.FinalizeType_FINALIZE_REBASE_LLM:
+			a.finalRebaseLLMConsumed.Add(1)
 		}
 		a.locks.Lock(rec.Key)
 		if err := a.ApplyFinalize(&rec); err != nil {
@@ -229,12 +255,44 @@ func (a *Applier) setFinalized(opID string, out *pb.OpOutcome) {
 	switch out.Outcome {
 	case pb.OutcomeType_OUTCOME_COMMIT_PATCH:
 		outcome = "COMMIT_PATCH"
+		a.outcomeCommitPatch.Add(1)
 	case pb.OutcomeType_OUTCOME_NOOP:
 		outcome = "NOOP"
+		a.outcomeNoop.Add(1)
 	case pb.OutcomeType_OUTCOME_FAIL:
 		outcome = "FAIL"
+		a.outcomeFail.Add(1)
 	case pb.OutcomeType_OUTCOME_TRANSFORM:
 		outcome = "TRANSFORM"
+		a.outcomeTransform.Add(1)
 	}
 	a.status[opID] = OpStatus{Status: "FINALIZED", Outcome: outcome, Reason: out.Reason}
+}
+
+type MetricsSnapshot struct {
+	CertEmitted            int64 `json:"cert_emitted"`
+	MergeFinalizeEmitted   int64 `json:"merge_finalize_emitted"`
+	FinalRecordsConsumed   int64 `json:"final_records_consumed"`
+	FinalMergeConsumed     int64 `json:"final_merge_consumed"`
+	FinalRebaseConsumed    int64 `json:"final_rebase_consumed"`
+	FinalRebaseLLMConsumed int64 `json:"final_rebase_llm_consumed"`
+	OutcomeCommitPatch     int64 `json:"outcome_commit_patch"`
+	OutcomeNoop            int64 `json:"outcome_noop"`
+	OutcomeFail            int64 `json:"outcome_fail"`
+	OutcomeTransform       int64 `json:"outcome_transform"`
+}
+
+func (a *Applier) MetricsSnapshot() MetricsSnapshot {
+	return MetricsSnapshot{
+		CertEmitted:            a.certEmitted.Load(),
+		MergeFinalizeEmitted:   a.mergeFinalizeEmitted.Load(),
+		FinalRecordsConsumed:   a.finalRecordsConsumed.Load(),
+		FinalMergeConsumed:     a.finalMergeConsumed.Load(),
+		FinalRebaseConsumed:    a.finalRebaseConsumed.Load(),
+		FinalRebaseLLMConsumed: a.finalRebaseLLMConsumed.Load(),
+		OutcomeCommitPatch:     a.outcomeCommitPatch.Load(),
+		OutcomeNoop:            a.outcomeNoop.Load(),
+		OutcomeFail:            a.outcomeFail.Load(),
+		OutcomeTransform:       a.outcomeTransform.Load(),
+	}
 }

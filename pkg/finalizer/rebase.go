@@ -14,14 +14,17 @@ import (
 )
 
 const (
-	RebaseModeRebase = "rebase"
-	RebaseModeLWW    = "lww"
+	RebaseModeRebase    = "rebase"
+	RebaseModeRebaseLLM = "rebase+llm"
+	RebaseModeLWW       = "lww"
 )
 
 func NormalizeRebaseMode(mode string) string {
 	switch mode {
 	case RebaseModeLWW:
 		return RebaseModeLWW
+	case RebaseModeRebaseLLM:
+		return RebaseModeRebaseLLM
 	default:
 		return RebaseModeRebase
 	}

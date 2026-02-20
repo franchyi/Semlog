@@ -1,102 +1,82 @@
 # Harness Testing Guide
 
-This document describes how to run workload harness tests for the multi-master Redpanda prototype.
+This document describes how to run workload harness tests and baseline comparisons.
 
 ## Prerequisites
 
-- Go toolchain installed (`go`)
-- Protobuf tooling installed (`protoc`, `protoc-gen-go`)
-- Redpanda + `rpk` installed
-- Repository dependencies resolved (`go mod tidy`)
+- Go installed
+- Redpanda + `rpk` installed and reachable at `127.0.0.1:9092`
+- `protoc` + `protoc-gen-go` installed (only needed when proto changes)
 
-## Fast Path (Recommended)
+## Key Metrics
 
-Use the automated end-to-end script:
+- `accepted/sec`: successful `POST /write` rate at ingest.
+- `finalized/sec`: rate of operations observed as `FINALIZED` via applier `/status`.
+  - This is a sampled finalize throughput signal from harness finalize polling.
+- `cert/sec`: `arb.cert` emission rate from applier metrics.
+  - Higher `cert/sec` means more conflict escalation to arbitration.
+  - Lower `cert/sec` means more fast-path merge behavior.
+
+## Fast E2E Run
 
 ```bash
 ./scripts/run-e2e.sh
 ```
 
-What it does:
+This script performs clean reset, launches services, runs harness, requires `"verify_passed": true`, then cleans up.
 
-1. Starts Redpanda if not already running.
-2. Deletes and recreates topics (`ingest.A`, `ingest.B`, `arb.cert`, `arb.final`).
-3. Resets known consumer groups.
-4. Starts services:
-   - `cmd/ingest` region A/B
-   - `cmd/applier` region A/B
-   - `cmd/finalizer`
-5. Waits for service health checks.
-6. Runs harness (`cmd/harness`) and requires `"verify_passed": true`.
-7. Cleans up launched processes on exit.
-
-## Useful Script Options
+## Run One Baseline
 
 ```bash
 ./scripts/run-e2e.sh \
   --workload B \
+  --baseline full \
   --duration 30s \
   --ops-per-sec 100 \
-  --keyspace-size 1000 \
-  --zipf-theta 0.8 \
-  --shared-hot-fraction 0.05 \
-  --disjoint-field-prob 0.8
+  --shared-hot-fraction 0.05
 ```
 
-## Manual Flow (Debug-Friendly)
+Notes:
 
-If you want to inspect each component manually:
+- `full` currently maps to `classify-mode=structural` + `rebase-mode=rebase+llm`.
+- If `OPENAI_API_KEY` is not set, finalizer logs fallback and behaves as deterministic `rebase`.
 
-1. Start Redpanda and create topics:
+## Run All Baselines (Matrix)
+
+Standard matrix script:
 
 ```bash
-./scripts/setup-redpanda.sh
-./scripts/create-topics.sh
+WORKLOADS="A B C D" BASELINES="full b1 b2 b3 b4" DURATION="30s" OPS_PER_SEC="100" ./scripts/run-baselines.sh
 ```
 
-2. Start services in separate terminals:
+Per-workload matrix loop (same script pattern used in recent comparisons):
 
 ```bash
-go run ./cmd/ingest --region=A --port=8181 --broker=127.0.0.1:9092
-go run ./cmd/ingest --region=B --port=8182 --broker=127.0.0.1:9092
-go run ./cmd/applier --region=A --port=8091 --broker=127.0.0.1:9092
-go run ./cmd/applier --region=B --port=8092 --broker=127.0.0.1:9092
-go run ./cmd/finalizer --broker=127.0.0.1:9092
+for b in full b1 b2 b3 b4; do
+  ./scripts/run-e2e.sh --workload B --baseline "$b" --duration 5s --ops-per-sec 100 --shared-hot-fraction 0.05
+done
 ```
 
-3. Run harness:
+## LLM Mode (FULL)
+
+To enable real OpenAI calls in FULL (`rebase+llm`), set API key in shell:
 
 ```bash
-go run ./cmd/harness \
-  --workload=B \
-  --duration=30s \
-  --ops-per-sec=100 \
-  --ingest-a-url=http://127.0.0.1:8181 \
-  --ingest-b-url=http://127.0.0.1:8182 \
-  --applier-a-url=http://127.0.0.1:8091 \
-  --applier-b-url=http://127.0.0.1:8092
+export OPENAI_API_KEY="..."
+./scripts/run-e2e.sh --workload B --baseline full --duration 5s --ops-per-sec 100
 ```
 
-4. Validate convergence:
+## Interpreting Results
 
-```bash
-curl -s http://127.0.0.1:8091/hash
-curl -s http://127.0.0.1:8092/hash
-```
+- Compare FULL vs B1/B2/B3 using:
+  - `summary.finalized_per_sec`
+  - `summary.p95_finalized`
+  - `arbitration.cert_per_sec`
+  - `arbitration.auto_merge_rate`
+- Keep `verify_passed=true` as a hard validity condition.
 
-The hashes must match, and harness output should include:
-
-```json
-"verify_passed": true
-```
-
-## Notes
-
-- In this environment, Redpanda binds `8081/8082`, so ingest services use `8181/8182`.
-- For quick local regression checks, you can also run:
+## Quick Regression Test
 
 ```bash
 ./scripts/run-test.sh
 ```
-
-This executes `go test ./...`.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	pb "github.com/yourorg/redpanda-mm/gen/proto"
 	"github.com/yourorg/redpanda-mm/pkg/kafka"
@@ -14,6 +15,9 @@ type Finalizer struct {
 	brokers    []string
 	producer   *kafka.Producer
 	rebaseMode string
+	llm        LLMClient
+	llmTimeout time.Duration
+	llmTokens  int
 
 	stableMu sync.RWMutex
 	stable   map[string]json.RawMessage
@@ -22,11 +26,29 @@ type Finalizer struct {
 	seen   map[string]bool
 }
 
-func New(brokers []string, producer *kafka.Producer, rebaseMode string) *Finalizer {
+type Config struct {
+	RebaseMode string
+	LLM        LLMClient
+	LLMTimeout time.Duration
+	LLMTokens  int
+}
+
+func New(brokers []string, producer *kafka.Producer, cfg Config) *Finalizer {
+	llmTimeout := cfg.LLMTimeout
+	if llmTimeout <= 0 {
+		llmTimeout = 5 * time.Second
+	}
+	llmTokens := cfg.LLMTokens
+	if llmTokens <= 0 {
+		llmTokens = 1024
+	}
 	return &Finalizer{
 		brokers:    brokers,
 		producer:   producer,
-		rebaseMode: NormalizeRebaseMode(rebaseMode),
+		rebaseMode: NormalizeRebaseMode(cfg.RebaseMode),
+		llm:        cfg.LLM,
+		llmTimeout: llmTimeout,
+		llmTokens:  llmTokens,
 		stable:     map[string]json.RawMessage{},
 		seen:       map[string]bool{},
 	}
@@ -124,6 +146,13 @@ func (f *Finalizer) consumeCerts(ctx context.Context) {
 			log.Printf("rebase failed conflict=%s: %v", cert.ConflictId, err)
 			_ = c.Commit(ctx, msg)
 			continue
+		}
+		if f.rebaseMode == RebaseModeRebaseLLM {
+			if repaired, err := f.tryLLMRepair(ctx, &cert, contenders, base, finalRec); err != nil {
+				log.Printf("llm repair fallback conflict=%s: %v", cert.ConflictId, err)
+			} else if repaired != nil {
+				finalRec = repaired
+			}
 		}
 		b, _ := pb.MarshalJSON(finalRec)
 		if _, _, err := f.producer.Write(ctx, "arb.final", cert.Key, b); err != nil {

@@ -94,7 +94,7 @@ done
 case "${BASELINE}" in
   full)
     APPLIER_CLASSIFY_MODE="structural"
-    FINALIZER_REBASE_MODE="rebase"
+    FINALIZER_REBASE_MODE="rebase+llm"
     ;;
   b1)
     APPLIER_CLASSIFY_MODE="naive"
