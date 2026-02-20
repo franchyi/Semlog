@@ -10,13 +10,14 @@ All baselines are implemented as **runtime flags** on the existing codebase. No 
 
 | ID | Name | DP1 (Classifier) | DP2 (Rebase) | Write Path | What it measures |
 |----|------|-------------------|--------------|------------|-----------------|
-| **FULL** | Full system | ON | ON | Both regions | Combined benefit of DP1+DP2 |
+| **SLX** | Semlog core | ON | ON (`rebase`) | Both regions | Combined benefit of DP1+DP2 without LLM |
+| **SLX-L** | Semlog + LLM repair | ON | ON (`rebase+llm`) | Both regions | Incremental impact of LLM-assisted repair |
 | **B1** | Naive conflict | OFF (all same-key = conflict) | ON | Both regions | Value of structural classification |
 | **B2** | LWW | ON | OFF (last writer wins) | Both regions | Value of deterministic rebase |
 | **B3** | Naive + LWW | OFF | OFF | Both regions | Worst multi-master (pure LWW) |
 | **B4** | Single-master | N/A | N/A | One region only | Cost of strong consistency |
 
-B3 (Naive + LWW) is the combined ablation — shows what you get from a naive multi-master with no intelligence. Comparing FULL vs B3 shows the total contribution of both design points together.
+B3 (Naive + LWW) is the combined ablation — shows what you get from a naive multi-master with no intelligence. Comparing SLX vs B3 shows the total contribution of both design points together.
 
 ---
 
@@ -38,12 +39,13 @@ B3 (Naive + LWW) is the combined ablation — shows what you get from a naive mu
 
 | Flag | Default | Values | Effect |
 |------|---------|--------|--------|
-| `--baseline` | `full` | `full`, `b1`, `b2`, `b3`, `b4` | Convenience flag that sets classify-mode + rebase-mode + write routing |
+| `--baseline` | `slx` | `slx`, `slx-l`, `b1`, `b2`, `b3`, `b4` | Convenience flag that sets classify-mode + rebase-mode + write routing |
 
 The `--baseline` flag is sugar that configures the appropriate combination:
 
 ```
---baseline=full  →  classify-mode=structural, rebase-mode=rebase, both regions write
+--baseline=slx  →  classify-mode=structural, rebase-mode=rebase, both regions write
+--baseline=slx-l →  classify-mode=structural, rebase-mode=rebase+llm, both regions write
 --baseline=b1    →  classify-mode=naive,      rebase-mode=rebase, both regions write
 --baseline=b2    →  classify-mode=structural, rebase-mode=lww,    both regions write
 --baseline=b3    →  classify-mode=naive,      rebase-mode=lww,    both regions write
@@ -78,7 +80,7 @@ func (a *Applier) Classify(op1, op2 *AcceptedRecord, stableState json.RawMessage
 
 ### What to measure
 
-- `arb.cert/sec` and `arb.final/sec` (should be much higher than FULL)
+- `arb.cert/sec` and `arb.final/sec` (should be much higher than SLX)
 - Finalize latency P50/P95/P99 (should be higher due to more arbitration traffic)
 - Throughput (may be lower if finalizer becomes bottleneck)
 - **Correctness must still hold** (convergence, invariants) — this is just less efficient, not incorrect
@@ -86,7 +88,7 @@ func (a *Applier) Classify(op1, op2 *AcceptedRecord, stableState json.RawMessage
 ### Expected result
 
 Under Workload B (Profile Patch, disjoint_field_prob=0.8):
-- B1 sends ~5x-10x more certificates to arb.cert than FULL
+- B1 sends ~5x-10x more certificates to arb.cert than SLX
 - Finalize latency increases because ops that could have been merged locally now round-trip through the Finalizer
 - Throughput may drop if Finalizer saturates
 
@@ -166,11 +168,11 @@ func (f *Finalizer) rebaseLWW(stableState json.RawMessage, ops []*AcceptedRecord
 ### Expected result
 
 Under Workload C (Task Queue, concurrent CLAIMs):
-- FULL: one CLAIM wins, the other FAILs (both attempted, one precondition fails) — correct and explicit
+- SLX: one CLAIM wins, the other FAILs (both attempted, one precondition fails) — correct and explicit
 - B2: one CLAIM wins (latest HLC), the other silently NOOPed — correct but information-losing
 
 Under Workload D (Inventory, concurrent RESERVEs):
-- FULL: first RESERVE succeeds, second may also succeed if stock permits (rebase re-checks)
+- SLX: first RESERVE succeeds, second may also succeed if stock permits (rebase re-checks)
 - B2: only latest RESERVE wins, earlier one silently NOOPed even if both could have succeeded
 
 ---
@@ -189,10 +191,10 @@ This is the "dumb" multi-master baseline: every same-key concurrent write goes t
 
 ### What to measure
 
-This is the **lower bound** for multi-master quality. Compare FULL vs B3 to show the total value of both design points combined:
-- FULL has higher op survival rate
-- FULL has lower arb traffic (most merges never reach arbitrator)
-- FULL has lower finalize latency (merges skip the arbitration round-trip)
+This is the **lower bound** for multi-master quality. Compare SLX vs B3 to show the total value of both design points combined:
+- SLX has higher op survival rate
+- SLX has lower arb traffic (most merges never reach arbitrator)
+- SLX has lower finalize latency (merges skip the arbitration round-trip)
 - Both have identical write-acceptance latency (both are multi-master)
 
 ---
@@ -238,15 +240,15 @@ This simulates the real cost: a Region B client must cross the WAN to reach the 
 
 ### What to measure
 
-- **Write latency for Region B clients**: under B4, Region B pays cross-region RTT on every write. Under FULL, Region B writes locally (fast ack), finalization happens asynchronously.
-- **Write throughput**: B4 is limited by single-region ingest capacity. FULL has 2x ingest capacity (both regions accept writes).
-- **Read consistency**: B4 gives strong consistency (all writes serialized). FULL gives CSCC (weaker, but with formal guarantees).
+- **Write latency for Region B clients**: under B4, Region B pays cross-region RTT on every write. Under SLX, Region B writes locally (fast ack), finalization happens asynchronously.
+- **Write throughput**: B4 is limited by single-region ingest capacity. SLX has 2x ingest capacity (both regions accept writes).
+- **Read consistency**: B4 gives strong consistency (all writes serialized). SLX gives CSCC (weaker, but with formal guarantees).
 
 ### Expected result
 
-- Region B write latency: B4 ≈ 80-120ms (WAN RTT), FULL ≈ 1-5ms (local append)
-- Throughput: B4 ≈ X ops/sec, FULL ≈ 1.5-2X ops/sec (two ingest pipelines)
-- Conflict rate: B4 = 0, FULL > 0 (but handled efficiently)
+- Region B write latency: B4 ≈ 80-120ms (WAN RTT), SLX ≈ 1-5ms (local append)
+- Throughput: B4 ≈ X ops/sec, SLX ≈ 1.5-2X ops/sec (two ingest pipelines)
+- Conflict rate: B4 = 0, SLX > 0 (but handled efficiently)
 
 ---
 
@@ -262,7 +264,7 @@ classifyMode := flag.String("classify-mode", "structural", "structural|naive")
 rebaseMode := flag.String("rebase-mode", "rebase", "rebase|lww")
 
 // cmd/harness/main.go
-baseline := flag.String("baseline", "full", "full|b1|b2|b3|b4")
+baseline := flag.String("baseline", "slx", "slx|slx-l|b1|b2|b3|b4")
 ```
 
 ### Step 2: Implement naive classification (B1)
@@ -302,8 +304,10 @@ In `pkg/workload/harness.go`:
 ```go
 func (h *Harness) resolveBaseline() {
     switch h.config.Baseline {
-    case "full":
+    case "slx":
         // defaults: structural + rebase + both regions
+    case "slx-l":
+        // defaults: structural + rebase+llm + both regions
     case "b1":
         h.applierFlags = append(h.applierFlags, "--classify-mode=naive")
     case "b2":
@@ -370,7 +374,7 @@ type RunMetrics struct {
 set -e
 
 WORKLOADS="A B C D"
-BASELINES="full b1 b2 b3 b4"
+BASELINES="slx slx-l b1 b2 b3 b4"
 DURATION="60s"
 OPS="500"
 OUTPUT_DIR="results/$(date +%Y%m%d-%H%M%S)"
@@ -404,7 +408,7 @@ echo "Results in $OUTPUT_DIR"
 
 ```json
 {
-  "baseline": "full",
+  "baseline": "slx",
   "workload": "B",
   "config": { "keyspace_size": 1000, "zipf_theta": 0.8, ... },
   "metrics": {
@@ -439,54 +443,54 @@ echo "Results in $OUTPUT_DIR"
 
 X-axis: `shared_hot_fraction` (0 to 0.5)
 Y-axis: `arb.cert/sec`
-Lines: FULL, B1, B3
+Lines: SLX, B1, B3
 Workload: B (Profile Patch)
 
-Shows: FULL has dramatically lower arb traffic than B1/B3 because the classifier auto-merges disjoint field updates.
+Shows: SLX has dramatically lower arb traffic than B1/B3 because the classifier auto-merges disjoint field updates.
 
 ### Graph 2: Op Survival Rate vs Conflict Rate
 
 X-axis: `shared_hot_fraction` (0 to 0.5)
 Y-axis: `op_survival_rate` (fraction of ops that get COMMIT_PATCH)
-Lines: FULL, B2, B3
+Lines: SLX, B2, B3
 Workload: D (Inventory)
 
-Shows: FULL saves ops that LWW would discard, because rebase re-executes and many ops still satisfy preconditions.
+Shows: SLX saves ops that LWW would discard, because rebase re-executes and many ops still satisfy preconditions.
 
 ### Graph 3: Finalize Latency CDF
 
 X-axis: latency (ms)
 Y-axis: CDF (0 to 1)
-Lines: FULL, B1, B3, B4
+Lines: SLX, B1, B3, B4
 Workload: B (Profile Patch)
 
-Shows: FULL has lower finalize latency than B1/B3 (less arbitration), but all multi-master baselines have lower write-acceptance latency than B4 (single-master).
+Shows: SLX has lower finalize latency than B1/B3 (less arbitration), but all multi-master baselines have lower write-acceptance latency than B4 (single-master).
 
 ### Graph 4: Write Latency — Region B Clients
 
 X-axis: percentile (P50, P75, P90, P95, P99)
 Y-axis: write-acceptance latency (ms)
-Lines: FULL (multi-master), B4 (single-master)
+Lines: SLX (multi-master), B4 (single-master)
 Workload: any
 
-Shows: Under B4, Region B clients pay ~80ms cross-region RTT on every write. Under FULL, they pay ~2ms local append. This is the fundamental multi-master advantage.
+Shows: Under B4, Region B clients pay ~80ms cross-region RTT on every write. Under SLX, they pay ~2ms local append. This is the fundamental multi-master advantage.
 
 ### Graph 5: Throughput Under Increasing Conflict Rate
 
 X-axis: `shared_hot_fraction` (0 to 0.5)
 Y-axis: finalized ops/sec
-Lines: FULL, B1, B2, B3
+Lines: SLX, B1, B2, B3
 Workload: A (Geo-YCSB++)
 
-Shows: FULL degrades gracefully. B1 drops faster (finalizer bottleneck). B3 drops fastest.
+Shows: SLX degrades gracefully. B1 drops faster (finalizer bottleneck). B3 drops fastest.
 
 ### Graph 6: Ablation Breakdown (Stacked)
 
 X-axis: Workload (A, B, C, D)
 Y-axis: % of same-key concurrent ops
 Stacked bars per workload:
-  - Auto-merged by DP1 (FULL only)
-  - Survived rebase by DP2 (FULL only)
+  - Auto-merged by DP1 (SLX only)
+  - Survived rebase by DP2 (SLX only)
   - NOOP/FAIL
 
 Shows the progressive reduction pipeline: DP1 handles most, DP2 rescues more, only a small fraction actually fails.

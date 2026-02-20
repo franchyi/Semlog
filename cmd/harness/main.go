@@ -14,7 +14,7 @@ import (
 func main() {
 	var (
 		workloadID           = flag.String("workload", "B", "Workload: A|B|C|D|E")
-		baseline             = flag.String("baseline", "full", "Baseline: full|b1|b2|b3|b4")
+		baseline             = flag.String("baseline", "slx", "Baseline: slx|slx-l|b1|b2|b3|b4")
 		duration             = flag.Duration("duration", 30*time.Second, "Test duration")
 		opsPerSec            = flag.Int("ops-per-sec", 100, "Per region ops/sec")
 		keyspaceSize         = flag.Int("keyspace-size", 1000, "Number of keys")

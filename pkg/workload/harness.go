@@ -91,7 +91,9 @@ func (h *Harness) Run(ctx context.Context) (RunResult, error) {
 	if h.Metrics == nil {
 		h.Metrics = NewMetrics()
 	}
-	h.applyBaselineConfig()
+	if err := h.applyBaselineConfig(); err != nil {
+		return RunResult{}, err
+	}
 
 	start := time.Now()
 	deadline := start.Add(time.Duration(h.Config.DurationSec) * time.Second)
@@ -183,8 +185,14 @@ func (h *Harness) runRegion(ctx context.Context, region, ingestURL string, kp *K
 	}
 }
 
-func (h *Harness) applyBaselineConfig() {
-	switch h.normalizeBaseline() {
+func (h *Harness) applyBaselineConfig() error {
+	baseline, err := h.normalizeBaseline()
+	if err != nil {
+		return err
+	}
+	h.Config.Baseline = baseline
+
+	switch baseline {
 	case "b4":
 		h.IngestBURL = h.IngestAURL
 		if h.Config.CrossRegionLatencyMS <= 0 {
@@ -195,15 +203,15 @@ func (h *Harness) applyBaselineConfig() {
 			h.Config.CrossRegionLatencyMS = 0
 		}
 	}
+	return nil
 }
 
-func (h *Harness) normalizeBaseline() string {
+func (h *Harness) normalizeBaseline() (string, error) {
 	switch h.Config.Baseline {
-	case "b1", "b2", "b3", "b4", "full":
-		return h.Config.Baseline
+	case "slx", "slx-l", "b1", "b2", "b3", "b4":
+		return h.Config.Baseline, nil
 	default:
-		h.Config.Baseline = "full"
-		return "full"
+		return "", fmt.Errorf("invalid baseline %q; expected one of slx|slx-l|b1|b2|b3|b4", h.Config.Baseline)
 	}
 }
 

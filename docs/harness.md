@@ -6,7 +6,6 @@ This document describes how to run workload harness tests and baseline compariso
 
 - Go installed
 - Redpanda + `rpk` installed and reachable at `127.0.0.1:9092`
-- `protoc` + `protoc-gen-go` installed (only needed when proto changes)
 
 ## Key Metrics
 
@@ -24,13 +23,14 @@ This document describes how to run workload harness tests and baseline compariso
 ```
 
 This script performs clean reset, launches services, runs harness, requires `"verify_passed": true`, then cleans up.
+Default is `--workload B --baseline slx --duration 30s`.
 
 ## Run One Baseline
 
 ```bash
 ./scripts/run-e2e.sh \
   --workload B \
-  --baseline full \
+  --baseline slx \
   --duration 30s \
   --ops-per-sec 100 \
   --shared-hot-fraction 0.05
@@ -38,37 +38,38 @@ This script performs clean reset, launches services, runs harness, requires `"ve
 
 Notes:
 
-- `full` currently maps to `classify-mode=structural` + `rebase-mode=rebase+llm`.
+- `slx` maps to `classify-mode=structural` + `rebase-mode=rebase`.
+- `slx-l` maps to `classify-mode=structural` + `rebase-mode=rebase+llm`.
 - If `OPENAI_API_KEY` is not set, finalizer logs fallback and behaves as deterministic `rebase`.
 
-## Run All Baselines (Matrix)
+## Full Comparison (All Workloads x All Baselines)
 
-Standard matrix script:
+This runs `A/B/C/D` across `slx`, `slx-l`, `b1`, `b2`, `b3`, `b4` and writes logs to a new timestamped directory under `results/`.
 
-```bash
-WORKLOADS="A B C D" BASELINES="full b1 b2 b3 b4" DURATION="30s" OPS_PER_SEC="100" ./scripts/run-baselines.sh
-```
-
-Per-workload matrix loop (same script pattern used in recent comparisons):
+Quick (smoke) matrix:
 
 ```bash
-for b in full b1 b2 b3 b4; do
-  ./scripts/run-e2e.sh --workload B --baseline "$b" --duration 5s --ops-per-sec 100 --shared-hot-fraction 0.05
-done
+WORKLOADS="A B C D" BASELINES="slx slx-l b1 b2 b3 b4" DURATION="5s" OPS_PER_SEC="100" ./scripts/run-baselines.sh
 ```
 
-## LLM Mode (FULL)
+More stable (recommended) matrix:
 
-To enable real OpenAI calls in FULL (`rebase+llm`), set API key in shell:
+```bash
+WORKLOADS="A B C D" BASELINES="slx slx-l b1 b2 b3 b4" DURATION="15s" OPS_PER_SEC="100" ./scripts/run-baselines.sh
+```
+
+## LLM Mode (SLX-L)
+
+To enable real OpenAI calls in SLX-L (`rebase+llm`), set API key in shell:
 
 ```bash
 export OPENAI_API_KEY="..."
-./scripts/run-e2e.sh --workload B --baseline full --duration 5s --ops-per-sec 100
+./scripts/run-e2e.sh --workload B --baseline slx-l --duration 5s --ops-per-sec 100
 ```
 
 ## Interpreting Results
 
-- Compare FULL vs B1/B2/B3 using:
+- Compare `slx` / `slx-l` vs `b1` / `b2` / `b3` using:
   - `summary.finalized_per_sec`
   - `summary.p95_finalized`
   - `arbitration.cert_per_sec`

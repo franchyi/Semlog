@@ -3,7 +3,7 @@ set -euo pipefail
 
 BROKER="127.0.0.1:9092"
 WORKLOAD="B"
-BASELINE="full"
+BASELINE="slx"
 DURATION="30s"
 OPS_PER_SEC="100"
 KEYSPACE_SIZE="1000"
@@ -25,7 +25,7 @@ Usage: $0 [options]
 Options:
   --broker <host:port>           Kafka broker (default: ${BROKER})
   --workload <A|B|C|D|E>         Workload ID (default: ${WORKLOAD})
-  --baseline <full|b1|b2|b3|b4>  Baseline mode (default: ${BASELINE})
+  --baseline <slx|slx-l|b1|b2|b3|b4>  Baseline mode (default: ${BASELINE})
   --duration <Go duration>        Harness duration (default: ${DURATION})
   --ops-per-sec <int>            Per-region OPS (default: ${OPS_PER_SEC})
   --keyspace-size <int>          Keyspace size (default: ${KEYSPACE_SIZE})
@@ -92,7 +92,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${BASELINE}" in
-  full)
+  slx)
+    APPLIER_CLASSIFY_MODE="structural"
+    FINALIZER_REBASE_MODE="rebase"
+    ;;
+  slx-l)
     APPLIER_CLASSIFY_MODE="structural"
     FINALIZER_REBASE_MODE="rebase+llm"
     ;;
@@ -113,7 +117,7 @@ case "${BASELINE}" in
     FINALIZER_REBASE_MODE="rebase"
     ;;
   *)
-    echo "Invalid baseline: ${BASELINE}. Must be one of: full|b1|b2|b3|b4" >&2
+    echo "Invalid baseline: ${BASELINE}. Must be one of: slx|slx-l|b1|b2|b3|b4" >&2
     exit 1
     ;;
 esac

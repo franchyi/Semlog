@@ -1,0 +1,56 @@
+Redpanda is already running at 127.0.0.1:9092
+Resetting topics (attempt 1/10)...
+Topics reset with expected partition counts
+Resetting consumer groups...
+Starting ingest-A...
+ingest-A started (pid=420720, log=/tmp/tmp.hcuHqoE6mI/ingest-A.log)
+Starting ingest-B...
+ingest-B started (pid=420721, log=/tmp/tmp.hcuHqoE6mI/ingest-B.log)
+Starting applier-A...
+applier-A started (pid=420722, log=/tmp/tmp.hcuHqoE6mI/applier-A.log)
+Starting applier-B...
+applier-B started (pid=420723, log=/tmp/tmp.hcuHqoE6mI/applier-B.log)
+Starting finalizer...
+finalizer started (pid=420724, log=/tmp/tmp.hcuHqoE6mI/finalizer.log)
+ingest-A is healthy
+ingest-B is healthy
+applier-A is healthy
+applier-B is healthy
+Running harness...
+{
+  "baseline": "b2",
+  "summary": {
+    "accepted": 1000,
+    "finalized": 0,
+    "finalize_timeouts": 1000,
+    "p50_accepted": 5559200,
+    "p95_accepted": 5635788,
+    "p99_accepted": 5739458,
+    "p50_finalized": 0,
+    "p95_finalized": 0,
+    "p99_finalized": 0,
+    "accepted_per_sec": 28.56618938211935,
+    "finalized_per_sec": 0,
+    "outcome_commit_patch": 0,
+    "outcome_noop": 0,
+    "outcome_fail": 0,
+    "outcome_transform": 0,
+    "outcome_unknown": 0
+  },
+  "arbitration": {
+    "cert_count": 2222,
+    "cert_per_sec": 63.4740728070692,
+    "final_record_count": 0,
+    "final_per_sec": 0,
+    "merge_finalize_count": 0,
+    "rebase_finalize_count": 0,
+    "rebase_llm_finalize_count": 0,
+    "auto_merge_rate": 0,
+    "arb_outcome_commit_patch": 0,
+    "arb_outcome_noop": 0,
+    "arb_outcome_fail": 0,
+    "arb_outcome_transform": 0
+  },
+  "verify_passed": true
+}
+E2E run passed

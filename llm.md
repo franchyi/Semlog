@@ -684,14 +684,14 @@ type DP3Metrics struct {
 
 | Baseline | DP1 | DP2 | DP3 |
 |----------|-----|-----|-----|
-| `full` | ON | rebase | OFF |
-| `full+llm` | ON | rebase+llm | ON |
+| `slx` | ON | rebase | OFF |
+| `slx-l` | ON | rebase+llm | ON |
 | `b1` | OFF | rebase | OFF |
 | `b2` | ON | lww | OFF |
 | `b3` | OFF | lww | OFF |
 | `b4` | ON | rebase | OFF (single-master) |
 
-Key comparison: `full` vs `full+llm` isolates DP3 contribution.
+Key comparison: `slx` vs `slx-l` isolates DP3 contribution.
 
 ### Ablations (within DP3)
 
@@ -705,7 +705,7 @@ Key comparison: `full` vs `full+llm` isolates DP3 contribution.
 **Graph 7: Op Survival With/Without LLM**
 - X-axis: Workload (A, B, C, D)
 - Y-axis: op_survival_rate
-- Bars: `full` vs `full+llm`
+- Bars: `slx` vs `slx-l`
 
 **Graph 8: DP3 Verifier Rejection Breakdown**
 - X-axis: Verification stage (V0-V6)

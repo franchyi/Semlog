@@ -36,7 +36,7 @@ type Config struct {
 func New(brokers []string, producer *kafka.Producer, cfg Config) *Finalizer {
 	llmTimeout := cfg.LLMTimeout
 	if llmTimeout <= 0 {
-		llmTimeout = 5 * time.Second
+		llmTimeout = 15 * time.Second
 	}
 	llmTokens := cfg.LLMTokens
 	if llmTokens <= 0 {

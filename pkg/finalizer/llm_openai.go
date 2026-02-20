@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultOpenAIURL   = "https://api.openai.com/v1/chat/completions"
-	defaultOpenAIModel = "gpt-4.1-mini"
+	defaultOpenAIModel = "gpt-5-mini"
 )
 
 type OpenAIClient struct {
@@ -69,8 +69,7 @@ func (c *OpenAIClient) CompleteJSON(ctx context.Context, prompt string, maxToken
 			{"role": "system", "content": "You are a conflict resolution assistant. Output JSON only."},
 			{"role": "user", "content": prompt},
 		},
-		"temperature": 0,
-		"max_tokens":  maxTokens,
+		"max_completion_tokens": maxTokens,
 	}
 	body, _ := json.Marshal(reqBody)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.APIURL, bytes.NewReader(body))
