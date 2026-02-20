@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	kgo "github.com/segmentio/kafka-go"
 	pb "github.com/yourorg/redpanda-mm/gen/proto"
@@ -53,6 +54,10 @@ type Applier struct {
 	outcomeNoop            atomic.Int64
 	outcomeFail            atomic.Int64
 	outcomeTransform       atomic.Int64
+	finalApplyErrors       atomic.Int64
+	finalizeDuplicateSkips atomic.Int64
+	baseHashMismatches     atomic.Int64
+	finalHashMismatches    atomic.Int64
 }
 
 func New(region string, brokers []string, producer *kafka.Producer, classifyMode string) (*Applier, error) {
@@ -229,7 +234,11 @@ func (a *Applier) consumeFinal(ctx context.Context, topic, group string) {
 		}
 		a.locks.Lock(rec.Key)
 		if err := a.ApplyFinalize(&rec); err != nil {
+			a.finalApplyErrors.Add(1)
 			log.Printf("failed apply finalize key=%s conflict=%s err=%v", rec.Key, rec.ConflictId, err)
+			a.locks.Unlock(rec.Key)
+			time.Sleep(200 * time.Millisecond)
+			continue
 		}
 		a.locks.Unlock(rec.Key)
 
@@ -280,6 +289,10 @@ type MetricsSnapshot struct {
 	OutcomeNoop            int64 `json:"outcome_noop"`
 	OutcomeFail            int64 `json:"outcome_fail"`
 	OutcomeTransform       int64 `json:"outcome_transform"`
+	FinalApplyErrors       int64 `json:"final_apply_errors"`
+	FinalizeDuplicateSkips int64 `json:"finalize_duplicate_skips"`
+	BaseHashMismatches     int64 `json:"base_hash_mismatches"`
+	FinalHashMismatches    int64 `json:"final_hash_mismatches"`
 }
 
 func (a *Applier) MetricsSnapshot() MetricsSnapshot {
@@ -294,5 +307,9 @@ func (a *Applier) MetricsSnapshot() MetricsSnapshot {
 		OutcomeNoop:            a.outcomeNoop.Load(),
 		OutcomeFail:            a.outcomeFail.Load(),
 		OutcomeTransform:       a.outcomeTransform.Load(),
+		FinalApplyErrors:       a.finalApplyErrors.Load(),
+		FinalizeDuplicateSkips: a.finalizeDuplicateSkips.Load(),
+		BaseHashMismatches:     a.baseHashMismatches.Load(),
+		FinalHashMismatches:    a.finalHashMismatches.Load(),
 	}
 }

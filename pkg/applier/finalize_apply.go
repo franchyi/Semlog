@@ -3,6 +3,7 @@ package applier
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 
 	pb "github.com/yourorg/redpanda-mm/gen/proto"
@@ -20,6 +21,7 @@ func (a *Applier) ApplyFinalize(rec *pb.FinalizeRecord) error {
 	a.appliedMu.Lock()
 	if a.appliedConflicts[rec.ConflictId] {
 		a.appliedMu.Unlock()
+		a.finalizeDuplicateSkips.Add(1)
 		return nil
 	}
 	a.appliedMu.Unlock()
@@ -27,6 +29,7 @@ func (a *Applier) ApplyFinalize(rec *pb.FinalizeRecord) error {
 	state, _ := a.store.Get(rec.Key)
 	curHash := jsonutil.CanonicalHash(state)
 	if len(rec.BaseStateHash) > 0 && !bytesEq(curHash, rec.BaseStateHash) {
+		a.baseHashMismatches.Add(1)
 		log.Printf("warning: base hash mismatch key=%s conflict=%s", rec.Key, rec.ConflictId)
 	}
 
@@ -42,6 +45,7 @@ func (a *Applier) ApplyFinalize(rec *pb.FinalizeRecord) error {
 		}
 	}
 
+	finalized := make([]*pb.OpOutcome, 0, len(ordered))
 	for _, opID := range ordered {
 		out := outcomeByID[opID]
 		if out == nil {
@@ -50,33 +54,35 @@ func (a *Applier) ApplyFinalize(rec *pb.FinalizeRecord) error {
 		switch out.Outcome {
 		case pb.OutcomeType_OUTCOME_COMMIT_PATCH:
 			if len(out.PatchJson) == 0 {
+				finalized = append(finalized, out)
 				continue
 			}
 			next, err := applyMergePatch(state, out.PatchJson)
 			if err != nil {
-				return err
+				return fmt.Errorf("apply patch op_id=%s: %w", opID, err)
 			}
 			state = next
 		case pb.OutcomeType_OUTCOME_TRANSFORM:
 			if len(out.TransformJson) == 0 {
+				finalized = append(finalized, out)
 				continue
 			}
 			next, err := applyMergePatch(state, out.TransformJson)
 			if err != nil {
-				return err
+				return fmt.Errorf("apply transform op_id=%s: %w", opID, err)
 			}
 			state = next
 		case pb.OutcomeType_OUTCOME_NOOP, pb.OutcomeType_OUTCOME_FAIL:
 			// no state change
 		}
-
-		a.setFinalized(opID, out)
+		finalized = append(finalized, out)
 	}
 
 	a.store.Set(rec.Key, state)
 	if len(rec.FinalStateHash) > 0 {
 		newHash := jsonutil.CanonicalHash(state)
 		if !bytesEq(newHash, rec.FinalStateHash) {
+			a.finalHashMismatches.Add(1)
 			log.Printf("warning: final hash mismatch key=%s conflict=%s", rec.Key, rec.ConflictId)
 		}
 	}
@@ -85,6 +91,9 @@ func (a *Applier) ApplyFinalize(rec *pb.FinalizeRecord) error {
 	a.appliedMu.Lock()
 	a.appliedConflicts[rec.ConflictId] = true
 	a.appliedMu.Unlock()
+	for _, out := range finalized {
+		a.setFinalized(out.OpId, out)
+	}
 	return nil
 }
 

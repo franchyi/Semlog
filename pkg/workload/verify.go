@@ -27,6 +27,8 @@ func VerifyEventually(applierAURL, applierBURL string, timeout, interval time.Du
 	deadline := time.Now().Add(timeout)
 
 	var lastErr error
+	var lastAHash string
+	var lastBHash string
 	for time.Now().Before(deadline) {
 		ha, err := fetchHash(hc, strings.TrimSuffix(applierAURL, "/")+"/hash")
 		if err != nil {
@@ -40,11 +42,27 @@ func VerifyEventually(applierAURL, applierBURL string, timeout, interval time.Du
 			time.Sleep(interval)
 			continue
 		}
+		lastAHash = ha
+		lastBHash = hb
 		if ha == hb {
 			return nil
 		}
 		lastErr = fmt.Errorf("stable hash mismatch: A=%s B=%s", ha, hb)
 		time.Sleep(interval)
+	}
+
+	if lastAHash != "" && lastBHash != "" && lastAHash != lastBHash {
+		aDebug, _ := fetchVerifyDebug(hc, applierAURL)
+		bDebug, _ := fetchVerifyDebug(hc, applierBURL)
+		lastErr = fmt.Errorf(
+			"stable hash mismatch: A=%s B=%s (A.final_records=%d B.final_records=%d A.apply_errors=%d B.apply_errors=%d)",
+			lastAHash,
+			lastBHash,
+			aDebug.FinalRecordsConsumed,
+			bDebug.FinalRecordsConsumed,
+			aDebug.FinalApplyErrors,
+			bDebug.FinalApplyErrors,
+		)
 	}
 
 	if lastErr != nil {
@@ -69,4 +87,26 @@ func fetchHash(client *http.Client, url string) (string, error) {
 		return "", err
 	}
 	return body.Hash, nil
+}
+
+type verifyDebug struct {
+	FinalRecordsConsumed int64 `json:"final_records_consumed"`
+	FinalApplyErrors     int64 `json:"final_apply_errors"`
+}
+
+func fetchVerifyDebug(client *http.Client, applierURL string) (verifyDebug, error) {
+	url := strings.TrimSuffix(applierURL, "/") + "/metrics"
+	resp, err := client.Get(url)
+	if err != nil {
+		return verifyDebug{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return verifyDebug{}, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	var body verifyDebug
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return verifyDebug{}, err
+	}
+	return body, nil
 }
